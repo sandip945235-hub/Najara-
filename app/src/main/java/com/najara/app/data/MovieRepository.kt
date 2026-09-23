@@ -35,6 +35,14 @@ class MovieRepository {
         val embedIdx = header.indexOf("embedlink")
         val dlIdx = header.indexOf("downloadlink")
 
+        // Optional columns (अगर नहीं हैं तो -1 रहेंगे)
+        val trailerIdx = header.indexOf("trailer")
+        val ratingIdx = header.indexOf("rating")
+        val printIdx = header.indexOf("print")
+        val industryIdx = header.indexOf("industry")
+        val languageIdx = header.indexOf("language")
+        val qualityIdx = header.indexOf("quality")
+
         if (titleIdx == -1 || posterIdx == -1 || catIdx == -1 ||
             embedIdx == -1 || dlIdx == -1) return emptyList()
 
@@ -42,12 +50,23 @@ class MovieRepository {
             val cols = splitCsvLine(line)
             if (cols.size <= maxOf(titleIdx, posterIdx, catIdx, embedIdx, dlIdx))
                 return@mapNotNull null
+
+            // Safe getter — अगर column नहीं है तो खाली string
+            fun get(idx: Int): String =
+                if (idx >= 0 && idx < cols.size) cols[idx] else ""
+
             Movie(
                 title = cols[titleIdx],
                 poster = cols[posterIdx],
                 category = cols[catIdx],
                 embedLink = cols[embedIdx],
-                downloadLink = cols[dlIdx]
+                downloadLink = cols[dlIdx],
+                trailer = get(trailerIdx),
+                rating = get(ratingIdx),
+                print = get(printIdx),
+                industry = get(industryIdx),
+                language = get(languageIdx),
+                quality = get(qualityIdx)
             )
         }
     }
