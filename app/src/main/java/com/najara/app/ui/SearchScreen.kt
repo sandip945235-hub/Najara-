@@ -1,16 +1,22 @@
 package com.najara.app.ui
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
@@ -32,55 +38,109 @@ fun SearchScreen(navController: NavController) {
         it.title.contains(query, ignoreCase = true)
     }
 
-    Column(Modifier.fillMaxSize().padding(8.dp)) {
-        OutlinedTextField(
-            value = query, onValueChange = { query = it },
-            label = { Text("Search movies...") },
-            modifier = Modifier.fillMaxWidth(),
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedTextColor = Color.White, unfocusedTextColor = Color.White,
-                focusedBorderColor = Color(0xFFE50914), unfocusedBorderColor = Color.Gray
-            )
-        )
-
-        Spacer(Modifier.height(8.dp))
-
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            items(categories.size) { i ->
-                val c = categories[i]
-                FilterChip(
-                    selected = c == category,
-                    onClick = { category = c },
-                    label = { Text(c, color = Color.White) },
-                    colors = FilterChipDefaults.filterChipColors(
-                        containerColor = Color(0xFF1A1A1A),
-                        selectedContainerColor = Color(0xFFE50914)
+    Scaffold(
+        containerColor = Color.Black,
+        topBar = {
+            Column(Modifier.background(Color.Black)) {
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 10.dp)
+                ) {
+                    Text(
+                        "🔍 Search",
+                        color = Color(0xFFE50914),
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.titleLarge
                     )
+                }
+            }
+        },
+        bottomBar = {
+            NavigationBar(containerColor = Color(0xFF0A0A0A)) {
+                NavigationBarItem(
+                    selected = false,
+                    onClick = { navController.navigate("home") },
+                    icon = { Icon(Icons.Default.Home, "Home", tint = Color.White) },
+                    label = { Text("Home", color = Color.White) }
+                )
+                NavigationBarItem(
+                    selected = true,
+                    onClick = { },
+                    icon = { Icon(Icons.Default.Search, "Search", tint = Color(0xFFE50914)) },
+                    label = { Text("Search", color = Color.White) }
+                )
+                NavigationBarItem(
+                    selected = false,
+                    onClick = { navController.navigate("settings") },
+                    icon = { Icon(Icons.Default.Settings, "Settings", tint = Color.White) },
+                    label = { Text("Settings", color = Color.White) }
                 )
             }
         }
-
-        Spacer(Modifier.height(8.dp))
-
-        LazyVerticalGrid(
-            columns = GridCells.Fixed(3),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
-            modifier = Modifier.fillMaxSize()
+    ) { padding ->
+        Column(
+            Modifier
+                .padding(padding)
+                .fillMaxSize()
+                .background(Color.Black)
+                .padding(8.dp)
         ) {
-            items(filtered) { movie ->
-                AsyncImage(
-                    model = movie.poster, contentDescription = movie.title,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier
-                        .fillMaxWidth().aspectRatio(2f / 3f)
-                        .clip(RoundedCornerShape(8.dp))
-                        .clickable {
-                            val encoded = android.net.Uri.encode(movie.embedLink)
-                            val t = android.net.Uri.encode(movie.title)
-                            navController.navigate("player/$t/$encoded")
-                        }
+            OutlinedTextField(
+                value = query,
+                onValueChange = { query = it },
+                label = { Text("Search movies...") },
+                modifier = Modifier.fillMaxWidth(),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedTextColor = Color.White,
+                    unfocusedTextColor = Color.White,
+                    focusedBorderColor = Color(0xFFE50914),
+                    unfocusedBorderColor = Color.Gray,
+                    focusedLabelColor = Color(0xFFE50914),
+                    unfocusedLabelColor = Color.Gray
                 )
+            )
+
+            Spacer(Modifier.height(8.dp))
+
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                items(categories.size) { i ->
+                    val c = categories[i]
+                    FilterChip(
+                        selected = c == category,
+                        onClick = { category = c },
+                        label = { Text(c, color = Color.White) },
+                        colors = FilterChipDefaults.filterChipColors(
+                            containerColor = Color(0xFF1A1A1A),
+                            selectedContainerColor = Color(0xFFE50914)
+                        )
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(8.dp))
+
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(3),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier.fillMaxSize()
+            ) {
+                items(filtered) { movie ->
+                    AsyncImage(
+                        model = movie.poster,
+                        contentDescription = movie.title,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .aspectRatio(2f / 3f)
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable {
+                                val t = android.net.Uri.encode(movie.title)
+                                navController.navigate("detail/$t")
+                            }
+                    )
+                }
             }
         }
     }
