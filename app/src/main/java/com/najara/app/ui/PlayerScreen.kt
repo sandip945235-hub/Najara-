@@ -8,8 +8,11 @@ import android.widget.FrameLayout
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -20,10 +23,14 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.media3.common.MediaItem
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
@@ -34,11 +41,17 @@ fun PlayerScreen(title: String, videoUrl: String, onBack: () -> Unit) {
     val context = LocalContext.current
     val activity = context as? Activity
 
-    // ===== Auto Landscape + Sensor (phone घुमाओ → video घूमे) =====
+    // ===== Auto Landscape + Full Screen (समय, बैटरी, नेटवर्क, नीचे के बटन सब छुपे) =====
     DisposableEffect(Unit) {
         activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+        val window = activity?.window
+        val controller = window?.let { WindowCompat.getInsetsController(it, it.decorView) }
+        controller?.systemBarsBehavior =
+            WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        controller?.hide(WindowInsetsCompat.Type.systemBars())
         onDispose {
             activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+            controller?.show(WindowInsetsCompat.Type.systemBars())
         }
     }
 
@@ -55,7 +68,9 @@ fun PlayerScreen(title: String, videoUrl: String, onBack: () -> Unit) {
     var isPlaying by remember { mutableStateOf(true) }
     var currentPos by remember { mutableStateOf(0L) }
     var duration by remember { mutableStateOf(0L) }
+    var isDragging by remember { mutableStateOf(false) }
     var zoomLevel by remember { mutableStateOf(0) }  // 0=Normal, 1=Medium, 2=Full
+    var zoomToast by remember { mutableStateOf("") }
 
     val videoScale = when (zoomLevel) {
         0 -> 1.0f
@@ -63,9 +78,17 @@ fun PlayerScreen(title: String, videoUrl: String, onBack: () -> Unit) {
         else -> 1.30f
     }
 
+    // ===== ज़ूम का नाम 1 सेकंड दिखाकर छुपाना =====
+    LaunchedEffect(zoomToast) {
+        if (zoomToast.isNotEmpty()) {
+            delay(1200)
+            zoomToast = ""
+        }
+    }
+
     // ===== Auto-hide controls (4 sec) =====
-    LaunchedEffect(showControls, isLocked) {
-        if (showControls && !isLocked) {
+    LaunchedEffect(showControls, isLocked, isDragging, zoomLevel) {
+        if (showControls && !isLocked && !isDragging) {
             delay(4000)
             showControls = false
         }
@@ -74,7 +97,7 @@ fun PlayerScreen(title: String, videoUrl: String, onBack: () -> Unit) {
     // ===== Position update loop =====
     LaunchedEffect(Unit) {
         while (true) {
-            currentPos = exoPlayer.currentPosition
+            if (!isDragging) currentPos = exoPlayer.currentPosition
             duration = exoPlayer.duration.coerceAtLeast(0)
             isPlaying = exoPlayer.isPlaying
             delay(500)
@@ -133,6 +156,17 @@ fun PlayerScreen(title: String, videoUrl: String, onBack: () -> Unit) {
                 )
                 IconButton(onClick = { /* Cast */ }) {
                     Icon(Icons.Default.Cast, "Cast", tint = Color.White)
+                }
+                // ===== ZOOM BUTTON (अब ऊपर, Cast के बगल में) =====
+                IconButton(onClick = {
+                    zoomLevel = (zoomLevel + 1) % 3
+                    zoomToast = when (zoomLevel) {
+                        0 -> "Normal"
+                        1 -> "Medium"
+                        else -> "Full"
+                    }
+                }) {
+                    Icon(Icons.Default.AspectRatio, "Zoom", tint = Color.White)
                 }
                 IconButton(onClick = { /* Volume */ }) {
                     Icon(Icons.Default.VolumeUp, "Volume", tint = Color.White)
@@ -207,37 +241,21 @@ fun PlayerScreen(title: String, videoUrl: String, onBack: () -> Unit) {
                     )
                 }
             }
+        }
 
-            // ===== ZOOM BUTTON (Center के नीचे) =====
-            Column(
-                Modifier
-                    .align(Alignment.Center)
-                    .offset(y = 90.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                IconButton(
-                    onClick = { zoomLevel = (zoomLevel + 1) % 3 },
-                    modifier = Modifier
-                        .clip(CircleShape)
-                        .background(Color(0x88000000))
-                ) {
-                    Icon(
-                        Icons.Default.ZoomIn,
-                        "Zoom",
-                        tint = Color.White,
-                        modifier = Modifier.size(28.dp)
-                    )
-                }
-                Text(
-                    when (zoomLevel) {
-                        0 -> "Normal"
-                        1 -> "Medium"
-                        else -> "Full"
-                    },
-                    color = Color.White,
-                    style = MaterialTheme.typography.labelSmall
-                )
-            }
+        // ===== ZOOM का नाम (Normal / Medium / Full) =====
+        if (zoomToast.isNotEmpty()) {
+            Text(
+                zoomToast,
+                color = Color.White,
+                style = MaterialTheme.typography.labelLarge,
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = 72.dp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(Color(0x99000000))
+                    .padding(horizontal = 16.dp, vertical = 6.dp)
+            )
         }
 
         // ===== BOTTOM BAR (कोई काली पट्टी नहीं - सिर्फ gradient) =====
@@ -253,7 +271,7 @@ fun PlayerScreen(title: String, videoUrl: String, onBack: () -> Unit) {
                     )
                     .padding(horizontal = 16.dp, vertical = 10.dp)
             ) {
-                // ===== Thin Progress Bar =====
+                // ===== पतली Progress Bar =====
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         formatTime(currentPos),
@@ -261,17 +279,17 @@ fun PlayerScreen(title: String, videoUrl: String, onBack: () -> Unit) {
                         style = MaterialTheme.typography.labelSmall
                     )
                     Spacer(Modifier.width(10.dp))
-                    Slider(
-                        value = if (duration > 0) currentPos.toFloat() else 0f,
-                        onValueChange = { currentPos = it.toLong() },
-                        onValueChangeFinished = { exoPlayer.seekTo(currentPos) },
-                        valueRange = 0f..(if (duration > 0) duration.toFloat() else 1f),
-                        colors = SliderDefaults.colors(
-                            thumbColor = Color(0xFFFFA500),
-                            activeTrackColor = Color(0xFFFFA500),
-                            inactiveTrackColor = Color(0x66FFFFFF)
-                        ),
-                        modifier = Modifier.weight(1f).height(20.dp)
+                    ThinSeekBar(
+                        fraction = if (duration > 0) currentPos.toFloat() / duration else 0f,
+                        onSeekChange = { f ->
+                            isDragging = true
+                            currentPos = (f * duration).toLong()
+                        },
+                        onSeekDone = { f ->
+                            exoPlayer.seekTo((f * duration).toLong())
+                            isDragging = false
+                        },
+                        modifier = Modifier.weight(1f)
                     )
                     Spacer(Modifier.width(10.dp))
                     Text(
@@ -300,6 +318,69 @@ fun PlayerScreen(title: String, videoUrl: String, onBack: () -> Unit) {
 
     DisposableEffect(Unit) {
         onDispose { exoPlayer.release() }
+    }
+}
+
+// ===== पतली सीक-बार: पतली लाइन + छोटा नारंगी बिंदु =====
+@Composable
+private fun ThinSeekBar(
+    fraction: Float,
+    onSeekChange: (Float) -> Unit,
+    onSeekDone: (Float) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val change by rememberUpdatedState(onSeekChange)
+    val done by rememberUpdatedState(onSeekDone)
+    var dragFraction by remember { mutableStateOf(0f) }
+    val orange = Color(0xFFFFA500)
+
+    BoxWithConstraints(
+        modifier
+            .height(28.dp)
+            .pointerInput(Unit) {
+                detectTapGestures { o ->
+                    done((o.x / size.width).coerceIn(0f, 1f))
+                }
+            }
+            .pointerInput(Unit) {
+                detectHorizontalDragGestures(
+                    onDragStart = { o ->
+                        dragFraction = (o.x / size.width).coerceIn(0f, 1f)
+                        change(dragFraction)
+                    },
+                    onDragEnd = { done(dragFraction) },
+                    onDragCancel = { done(dragFraction) },
+                    onHorizontalDrag = { c, _ ->
+                        c.consume()
+                        dragFraction = (c.position.x / size.width).coerceIn(0f, 1f)
+                        change(dragFraction)
+                    }
+                )
+            },
+        contentAlignment = Alignment.CenterStart
+    ) {
+        val f = fraction.coerceIn(0f, 1f)
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(2.dp)
+                .clip(RoundedCornerShape(1.dp))
+                .background(Color(0x66FFFFFF))
+        )
+        Box(
+            Modifier
+                .fillMaxWidth(f)
+                .height(2.dp)
+                .clip(RoundedCornerShape(1.dp))
+                .background(orange)
+        )
+        Box(
+            Modifier
+                .offset(x = maxWidth * f - 6.dp)
+                .size(12.dp)
+                .clip(CircleShape)
+                .background(orange)
+        )
     }
 }
 
