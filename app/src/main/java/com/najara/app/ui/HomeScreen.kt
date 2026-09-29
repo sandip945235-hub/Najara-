@@ -19,30 +19,41 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
 import com.najara.app.data.Movie
 import com.najara.app.data.MovieRepository
+import com.najara.app.data.ShareHelper
 
 @Composable
 fun HomeScreen(navController: NavController) {
+    val context = LocalContext.current
     val repo = remember { MovieRepository() }
     var movies by remember { mutableStateOf<List<Movie>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
     var currentTab by remember { mutableStateOf("home") }
 
+    // ===== Share Dialog (48 hours) =====
+    var showShareDialog by remember { mutableStateOf(false) }
+
     LaunchedEffect(Unit) {
         movies = repo.fetchMovies()
         loading = false
+
+        // 48 घंटे बाद share popup दिखाओ
+        if (ShareHelper.shouldShowDialog(context)) {
+            showShareDialog = true
+            ShareHelper.markDialogShown(context)
+        }
     }
 
     Scaffold(
         containerColor = Color.Black,
         topBar = {
             Column(Modifier.background(Color.Black)) {
-                // ===== Top Bar: Logo + 3 icons =====
                 Row(
                     Modifier
                         .fillMaxWidth()
@@ -84,7 +95,6 @@ fun HomeScreen(navController: NavController) {
                         )
                     }
                 }
-                // ===== Movie Tab =====
                 TabRow(
                     selectedTabIndex = 0,
                     containerColor = Color.Black,
@@ -177,6 +187,11 @@ fun HomeScreen(navController: NavController) {
                     }
                 }
             }
+        }
+
+        // ===== Share Dialog Popup =====
+        if (showShareDialog) {
+            ShareDialog(onDismiss = { showShareDialog = false })
         }
     }
 }
