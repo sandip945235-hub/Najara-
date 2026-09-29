@@ -1,11 +1,9 @@
 package com.najara.app.ui
 
-import android.content.Intent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Search
@@ -19,6 +17,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
+import com.najara.app.data.ShareHelper
 
 @Composable
 fun SettingsScreen(navController: NavController) {
@@ -72,16 +71,9 @@ fun SettingsScreen(navController: NavController) {
 
             Spacer(Modifier.height(12.dp))
 
-            // ===== Share App =====
+            // ===== Share App (APK file) =====
             SettingItem("Share App") {
-                val intent = Intent(Intent.ACTION_SEND).apply {
-                    type = "text/plain"
-                    putExtra(
-                        Intent.EXTRA_TEXT,
-                        "Najara App देखें! 🎬 मूवीज़ देखने के लिए डाउनलोड करें।"
-                    )
-                }
-                context.startActivity(Intent.createChooser(intent, "Share via"))
+                ShareHelper.shareApk(context)
             }
 
             Spacer(Modifier.height(24.dp))
