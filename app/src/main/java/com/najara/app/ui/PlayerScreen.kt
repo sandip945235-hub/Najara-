@@ -3,13 +3,16 @@ package com.najara.app.ui
 import android.app.Activity
 import android.content.pm.ActivityInfo
 import android.net.Uri
+import android.provider.Settings
 import android.view.ViewGroup
+import android.view.WindowManager
 import android.widget.FrameLayout
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -52,6 +55,12 @@ fun PlayerScreen(title: String, videoUrl: String, onBack: () -> Unit) {
         onDispose {
             activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
             controller?.show(WindowInsetsCompat.Type.systemBars())
+            // बाहर निकलते समय फ़ोन की असली ब्राइटनेस वापस
+            window?.let {
+                val lp = it.attributes
+                lp.screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
+                it.attributes = lp
+            }
         }
     }
 
@@ -71,6 +80,39 @@ fun PlayerScreen(title: String, videoUrl: String, onBack: () -> Unit) {
     var isDragging by remember { mutableStateOf(false) }
     var zoomLevel by remember { mutableStateOf(0) }  // 0=Normal, 1=Medium, 2=Full
     var zoomToast by remember { mutableStateOf("") }
+
+    // ===== Brightness (बाईं तरफ़ ऊपर/नीचे स्वाइप) =====
+    var brightness by remember {
+        mutableStateOf(
+            run {
+                val current = activity?.window?.attributes?.screenBrightness ?: -1f
+                if (current >= 0f) current
+                else runCatching {
+                    Settings.System.getInt(
+                        context.contentResolver,
+                        Settings.System.SCREEN_BRIGHTNESS
+                    ) / 255f
+                }.getOrDefault(0.5f)
+            }
+        )
+    }
+    var showBrightness by remember { mutableStateOf(false) }
+
+    fun applyBrightness(value: Float) {
+        brightness = value.coerceIn(0.02f, 1f)
+        activity?.window?.let {
+            val lp = it.attributes
+            lp.screenBrightness = brightness
+            it.attributes = lp
+        }
+        showBrightness = true
+    }
+
+    // ब्राइटनेस पट्टी 1 सेकंड बाद छुपाना
+    LaunchedEffect(brightness) {
+        delay(1000)
+        showBrightness = false
+    }
 
     val videoScale = when (zoomLevel) {
         0 -> 1.0f
@@ -131,6 +173,26 @@ fun PlayerScreen(title: String, videoUrl: String, onBack: () -> Unit) {
                 }
         )
 
+        // ===== बाईं तरफ़ ब्राइटनेस स्वाइप एरिया (लॉक में बंद) =====
+        if (!isLocked) {
+            Box(
+                Modifier
+                    .align(Alignment.CenterStart)
+                    .fillMaxHeight()
+                    .fillMaxWidth(0.4f)
+                    .pointerInput(Unit) {
+                        detectTapGestures(onTap = { showControls = !showControls })
+                    }
+                    .pointerInput(Unit) {
+                        detectVerticalDragGestures { change, dragAmount ->
+                            change.consume()
+                            // ऊपर ले जाओ = रोशनी बढ़े, नीचे = कम
+                            applyBrightness(brightness - (dragAmount / size.height) * 1.5f)
+                        }
+                    }
+            )
+        }
+
         // ===== TOP BAR (कोई काली पट्टी नहीं - सिर्फ gradient) =====
         if (showControls && !isLocked) {
             Row(
@@ -157,7 +219,7 @@ fun PlayerScreen(title: String, videoUrl: String, onBack: () -> Unit) {
                 IconButton(onClick = { /* Cast */ }) {
                     Icon(Icons.Default.Cast, "Cast", tint = Color.White)
                 }
-                // ===== ZOOM BUTTON (अब ऊपर, Cast के बगल में) =====
+                // ===== ZOOM BUTTON (ऊपर, Cast के बगल में) =====
                 IconButton(onClick = {
                     zoomLevel = (zoomLevel + 1) % 3
                     zoomToast = when (zoomLevel) {
@@ -238,6 +300,39 @@ fun PlayerScreen(title: String, videoUrl: String, onBack: () -> Unit) {
                         Icons.Default.Forward10, "Fwd10",
                         tint = Color.White,
                         modifier = Modifier.size(48.dp)
+                    )
+                }
+            }
+        }
+
+        // ===== ब्राइटनेस पट्टी (सूरज + खड़ी लाइन) =====
+        if (showBrightness && !isLocked) {
+            Column(
+                Modifier
+                    .align(Alignment.CenterStart)
+                    .padding(start = 36.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Icon(
+                    Icons.Default.WbSunny,
+                    "Brightness",
+                    tint = Color.White,
+                    modifier = Modifier.size(26.dp)
+                )
+                Spacer(Modifier.height(10.dp))
+                Box(
+                    Modifier
+                        .width(4.dp)
+                        .height(150.dp)
+                        .clip(RoundedCornerShape(2.dp))
+                        .background(Color(0x66FFFFFF)),
+                    contentAlignment = Alignment.BottomCenter
+                ) {
+                    Box(
+                        Modifier
+                            .fillMaxWidth()
+                            .fillMaxHeight(brightness.coerceIn(0f, 1f))
+                            .background(Color.White)
                     )
                 }
             }
