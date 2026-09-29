@@ -9,14 +9,19 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.MediaItem
@@ -29,9 +34,9 @@ fun PlayerScreen(title: String, videoUrl: String, onBack: () -> Unit) {
     val context = LocalContext.current
     val activity = context as? Activity
 
-    // ===== Landscape fullscreen =====
+    // ===== Auto Landscape + Sensor (phone घुमाओ → video घूमे) =====
     DisposableEffect(Unit) {
-        activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+        activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
         onDispose {
             activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
         }
@@ -50,16 +55,23 @@ fun PlayerScreen(title: String, videoUrl: String, onBack: () -> Unit) {
     var isPlaying by remember { mutableStateOf(true) }
     var currentPos by remember { mutableStateOf(0L) }
     var duration by remember { mutableStateOf(0L) }
+    var zoomLevel by remember { mutableStateOf(0) }  // 0=Normal, 1=Medium, 2=Full
 
-    // ===== Auto hide controls (4 sec) =====
-    LaunchedEffect(showControls) {
+    val videoScale = when (zoomLevel) {
+        0 -> 1.0f
+        1 -> 1.15f
+        else -> 1.30f
+    }
+
+    // ===== Auto-hide controls (4 sec) =====
+    LaunchedEffect(showControls, isLocked) {
         if (showControls && !isLocked) {
             delay(4000)
             showControls = false
         }
     }
 
-    // ===== Update position every 500ms =====
+    // ===== Position update loop =====
     LaunchedEffect(Unit) {
         while (true) {
             currentPos = exoPlayer.currentPosition
@@ -76,6 +88,7 @@ fun PlayerScreen(title: String, videoUrl: String, onBack: () -> Unit) {
 
     Box(Modifier.fillMaxSize().background(Color.Black)) {
 
+        // ===== VIDEO (with Zoom) =====
         AndroidView(
             factory = {
                 PlayerView(it).apply {
@@ -87,15 +100,25 @@ fun PlayerScreen(title: String, videoUrl: String, onBack: () -> Unit) {
                     )
                 }
             },
-            modifier = Modifier.fillMaxSize().clickable {
-                if (!isLocked) showControls = !showControls
-            }
+            modifier = Modifier
+                .fillMaxSize()
+                .scale(videoScale)
+                .clickable(enabled = !isLocked) {
+                    showControls = !showControls
+                }
         )
 
-        // ===== Top Bar =====
+        // ===== TOP BAR (कोई काली पट्टी नहीं - सिर्फ gradient) =====
         if (showControls && !isLocked) {
             Row(
-                Modifier.fillMaxWidth().background(Color(0x99000000)).padding(12.dp),
+                Modifier
+                    .fillMaxWidth()
+                    .background(
+                        Brush.verticalGradient(
+                            listOf(Color(0xAA000000), Color.Transparent)
+                        )
+                    )
+                    .padding(horizontal = 8.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 IconButton(onClick = { exoPlayer.release(); onBack() }) {
@@ -104,40 +127,61 @@ fun PlayerScreen(title: String, videoUrl: String, onBack: () -> Unit) {
                 Text(
                     title,
                     color = Color.White,
+                    fontWeight = FontWeight.Bold,
                     modifier = Modifier.weight(1f),
                     style = MaterialTheme.typography.titleMedium
                 )
+                IconButton(onClick = { /* Cast */ }) {
+                    Icon(Icons.Default.Cast, "Cast", tint = Color.White)
+                }
+                IconButton(onClick = { /* Volume */ }) {
+                    Icon(Icons.Default.VolumeUp, "Volume", tint = Color.White)
+                }
+                IconButton(onClick = { /* Share */ }) {
+                    Icon(Icons.Default.Share, "Share", tint = Color.White)
+                }
                 IconButton(onClick = { isLocked = true }) {
                     Icon(Icons.Default.Lock, "Lock", tint = Color.White)
                 }
             }
         }
 
-        // ===== Unlock button (when locked) =====
+        // ===== UNLOCK BUTTON (सिर्फ Locked में) =====
         if (isLocked) {
             IconButton(
                 onClick = { isLocked = false },
-                modifier = Modifier.align(Alignment.CenterEnd).padding(16.dp)
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .padding(24.dp)
+                    .clip(CircleShape)
+                    .background(Color(0x88000000))
             ) {
-                Icon(Icons.Default.Lock, "Unlock", tint = Color.White,
-                    modifier = Modifier.size(32.dp))
+                Icon(
+                    Icons.Default.Lock,
+                    "Unlock",
+                    tint = Color.White,
+                    modifier = Modifier.size(32.dp)
+                )
             }
         }
 
-        // ===== Center Controls =====
+        // ===== CENTER CONTROLS =====
         if (showControls && !isLocked) {
             Row(
                 Modifier.align(Alignment.Center),
-                horizontalArrangement = Arrangement.spacedBy(32.dp),
+                horizontalArrangement = Arrangement.spacedBy(24.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // 10s back
+                // -10s
                 IconButton(onClick = {
                     val newPos = (exoPlayer.currentPosition - 10000).coerceAtLeast(0)
                     exoPlayer.seekTo(newPos)
                 }) {
-                    Icon(Icons.Default.Replay10, "Back10", tint = Color.White,
-                        modifier = Modifier.size(44.dp))
+                    Icon(
+                        Icons.Default.Replay10, "Back10",
+                        tint = Color.White,
+                        modifier = Modifier.size(48.dp)
+                    )
                 }
                 // Play/Pause
                 IconButton(onClick = {
@@ -146,73 +190,109 @@ fun PlayerScreen(title: String, videoUrl: String, onBack: () -> Unit) {
                 }) {
                     Icon(
                         if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                        "PlayPause", tint = Color.White, modifier = Modifier.size(64.dp)
+                        "PlayPause",
+                        tint = Color.White,
+                        modifier = Modifier.size(72.dp)
                     )
                 }
-                // 10s forward
+                // +10s
                 IconButton(onClick = {
                     val newPos = (exoPlayer.currentPosition + 10000).coerceAtMost(duration)
                     exoPlayer.seekTo(newPos)
                 }) {
-                    Icon(Icons.Default.Forward10, "Fwd10", tint = Color.White,
-                        modifier = Modifier.size(44.dp))
+                    Icon(
+                        Icons.Default.Forward10, "Fwd10",
+                        tint = Color.White,
+                        modifier = Modifier.size(48.dp)
+                    )
                 }
+            }
+
+            // ===== ZOOM BUTTON (Center के नीचे) =====
+            Column(
+                Modifier
+                    .align(Alignment.Center)
+                    .offset(y = 90.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                IconButton(
+                    onClick = { zoomLevel = (zoomLevel + 1) % 3 },
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .background(Color(0x88000000))
+                ) {
+                    Icon(
+                        Icons.Default.ZoomIn,
+                        "Zoom",
+                        tint = Color.White,
+                        modifier = Modifier.size(28.dp)
+                    )
+                }
+                Text(
+                    when (zoomLevel) {
+                        0 -> "Normal"
+                        1 -> "Medium"
+                        else -> "Full"
+                    },
+                    color = Color.White,
+                    style = MaterialTheme.typography.labelSmall
+                )
             }
         }
 
-        // ===== Bottom Seekbar + Time + Options =====
+        // ===== BOTTOM BAR (कोई काली पट्टी नहीं - सिर्फ gradient) =====
         if (showControls && !isLocked) {
             Column(
                 Modifier
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth()
-                    .background(Color(0x99000000))
+                    .background(
+                        Brush.verticalGradient(
+                            listOf(Color.Transparent, Color(0xCC000000))
+                        )
+                    )
                     .padding(horizontal = 16.dp, vertical = 10.dp)
             ) {
-                // Time + Seekbar
+                // ===== Thin Progress Bar =====
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         formatTime(currentPos),
                         color = Color.White,
-                        style = MaterialTheme.typography.labelMedium
+                        style = MaterialTheme.typography.labelSmall
                     )
-                    Spacer(Modifier.width(8.dp))
+                    Spacer(Modifier.width(10.dp))
                     Slider(
                         value = if (duration > 0) currentPos.toFloat() else 0f,
-                        onValueChange = { newValue ->
-                            currentPos = newValue.toLong()
-                        },
-                        onValueChangeFinished = {
-                            exoPlayer.seekTo(currentPos)
-                        },
+                        onValueChange = { currentPos = it.toLong() },
+                        onValueChangeFinished = { exoPlayer.seekTo(currentPos) },
                         valueRange = 0f..(if (duration > 0) duration.toFloat() else 1f),
                         colors = SliderDefaults.colors(
                             thumbColor = Color(0xFFFFA500),
                             activeTrackColor = Color(0xFFFFA500),
                             inactiveTrackColor = Color(0x66FFFFFF)
                         ),
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.weight(1f).height(20.dp)
                     )
-                    Spacer(Modifier.width(8.dp))
+                    Spacer(Modifier.width(10.dp))
                     Text(
                         formatTime(duration),
                         color = Color.White,
-                        style = MaterialTheme.typography.labelMedium
+                        style = MaterialTheme.typography.labelSmall
                     )
                 }
 
-                Spacer(Modifier.height(6.dp))
+                Spacer(Modifier.height(4.dp))
 
-                // Options bar (display only)
+                // ===== Bottom Options =====
                 Row(
                     Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceEvenly
                 ) {
                     PlayerOption(Icons.Default.Movie, "Recommended")
-                    PlayerOption(Icons.Default.HighQuality, "Quality")
+                    PlayerOption(Icons.Default.HighQuality, "Quality", "Auto")
                     PlayerOption(Icons.Default.MusicNote, "Audio")
                     PlayerOption(Icons.Default.SkipNext, "Next")
-                    PlayerOption(Icons.Default.Speed, "Speed")
+                    PlayerOption(Icons.Default.Speed, "Speed", "Normal")
                 }
             }
         }
@@ -226,12 +306,27 @@ fun PlayerScreen(title: String, videoUrl: String, onBack: () -> Unit) {
 @Composable
 private fun PlayerOption(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
-    label: String
+    label: String,
+    subLabel: String = ""
 ) {
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Icon(icon, label, tint = Color.White, modifier = Modifier.size(16.dp))
-        Spacer(Modifier.width(4.dp))
-        Text(label, color = Color.White, style = MaterialTheme.typography.labelSmall)
+        Icon(icon, label, tint = Color.White, modifier = Modifier.size(18.dp))
+        Spacer(Modifier.width(6.dp))
+        Column {
+            Text(
+                label,
+                color = Color.White,
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold
+            )
+            if (subLabel.isNotBlank()) {
+                Text(
+                    subLabel,
+                    color = Color(0xFFBDBDBD),
+                    style = MaterialTheme.typography.labelSmall
+                )
+            }
+        }
     }
 }
 
