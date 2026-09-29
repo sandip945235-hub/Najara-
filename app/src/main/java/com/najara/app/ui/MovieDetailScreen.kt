@@ -33,6 +33,7 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
+import com.najara.app.DownloadActivity
 import com.najara.app.data.Movie
 import com.najara.app.data.MovieRepository
 
@@ -235,7 +236,14 @@ fun MovieDetailScreen(navController: NavController, movieTitle: String) {
             horizontalArrangement = Arrangement.SpaceEvenly
         ) {
             ActionIcon(Icons.Default.FavoriteBorder, "Like") { }
-            ActionIcon(Icons.Default.Download, "Download") { }
+            ActionIcon(Icons.Default.Download, "Download") {
+                // ✅ DownloadActivity खोलो
+                val intent = Intent(context, DownloadActivity::class.java).apply {
+                    putExtra("movie_title", m.title)
+                    putExtra("movie_url", m.embedLink)
+                }
+                context.startActivity(intent)
+            }
             ActionIcon(Icons.Default.Add, "My List") { }
             ActionIcon(Icons.Default.Share, "Share") {
                 val intent = Intent(Intent.ACTION_SEND).apply {
