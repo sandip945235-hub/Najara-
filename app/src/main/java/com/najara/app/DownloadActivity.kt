@@ -1,4 +1,4 @@
-package com.yourapp.movieplayer
+package com.najara.app
 
 import android.app.DownloadManager
 import android.content.Context
@@ -15,16 +15,20 @@ import androidx.appcompat.app.AppCompatActivity
 
 class DownloadActivity : AppCompatActivity() {
 
+    // ✅ अपना Monetag Direct Link यहाँ डालें
     private val monetagDirectLink = "https://omg10.com/4/11919349"
 
+    // ✅ Ad काउंटर
     private var mainAdShown = false
     private var resolutionAdCount = 0
     private var finalAdCount = 0
     private var selectedChoice = ""
 
+    // मूवी डेटा (Intent से बदल सकते हैं)
     private var movieUrl = "https://yourserver.com/files/SpeedDemon_720p.mkv"
     private var movieTitle = "Speed Demon (2026).mkv"
 
+    // UI references
     private lateinit var btnMainDownload: Button
     private lateinit var layoutResolution: LinearLayout
     private lateinit var btn720p: Button
@@ -42,6 +46,9 @@ class DownloadActivity : AppCompatActivity() {
         btn720p = findViewById(R.id.btn720p)
         btn480p = findViewById(R.id.btn480p)
 
+        // ============================================
+        // STEP 1: Download बटन → 1 Ad → Resolution
+        // ============================================
         btnMainDownload.setOnClickListener {
             if (!mainAdShown) {
                 mainAdShown = true
@@ -53,6 +60,9 @@ class DownloadActivity : AppCompatActivity() {
             }
         }
 
+        // ============================================
+        // STEP 2: 720p / 480p → 2 Ads → Popup
+        // ============================================
         val onResolutionClick = View.OnClickListener {
             when (resolutionAdCount) {
                 0 -> {
@@ -78,6 +88,9 @@ class DownloadActivity : AppCompatActivity() {
         btn480p.setOnClickListener(onResolutionClick)
     }
 
+    // ============================================
+    // Popup: Fast vs Regular
+    // ============================================
     private fun showDownloadChoiceDialog() {
         AlertDialog.Builder(this)
             .setTitle("डाउनलोड विकल्प चुनें")
@@ -96,6 +109,9 @@ class DownloadActivity : AppCompatActivity() {
             .show()
     }
 
+    // ============================================
+    // STEP 3: 3 Ads → Download
+    // ============================================
     private fun showFinalAdsStep() {
         if (finalAdCount < 3) {
             finalAdCount++
@@ -119,6 +135,9 @@ class DownloadActivity : AppCompatActivity() {
         }
     }
 
+    // ============================================
+    // Monetag Ad खोलें
+    // ============================================
     private fun openMonetagAdLink() {
         try {
             startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(monetagDirectLink)))
@@ -127,6 +146,9 @@ class DownloadActivity : AppCompatActivity() {
         }
     }
 
+    // ============================================
+    // 1DM Check + Open
+    // ============================================
     private fun checkAndOpen1DM(url: String) {
         val pm = packageManager
         val is1DMInstalled = try {
@@ -164,6 +186,9 @@ class DownloadActivity : AppCompatActivity() {
         }
     }
 
+    // ============================================
+    // In-App Download (DownloadManager)
+    // ============================================
     private fun startInAppDownload(url: String, fileName: String) {
         try {
             val request = DownloadManager.Request(Uri.parse(url)).apply {
