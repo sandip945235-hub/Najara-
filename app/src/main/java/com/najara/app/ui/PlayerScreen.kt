@@ -1,11 +1,15 @@
 package com.najara.app.ui
 
+import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.pm.ActivityInfo
 import android.net.Uri
 import android.provider.Settings
 import android.view.ViewGroup
 import android.view.WindowManager
+import android.webkit.WebResourceRequest
+import android.webkit.WebView
+import android.webkit.WebViewClient
 import android.widget.FrameLayout
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
@@ -31,13 +35,22 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleOwner
 import androidx.media3.common.MediaItem
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import kotlinx.coroutines.delay
+
+// ===== AD सेटिंग =====
+// टेस्ट करना हो तो 30 * 60 * 1000L की जगह 60 * 1000L (1 मिनट) कर दें
+private const val AD_INTERVAL_MS = 30 * 60 * 1000L
+private const val AD_URL = "https://asiafilm.org/4/600fe50678836cdbd92320c581b0107d"
 
 @Composable
 fun PlayerScreen(title: String, videoUrl: String, onBack: () -> Unit) {
@@ -80,6 +93,28 @@ fun PlayerScreen(title: String, videoUrl: String, onBack: () -> Unit) {
     var isDragging by remember { mutableStateOf(false) }
     var zoomLevel by remember { mutableStateOf(0) }  // 0=Normal, 1=Medium, 2=Full
     var zoomToast by remember { mutableStateOf("") }
+
+    // ===== AD स्टेट =====
+    var showAd by remember { mutableStateOf(false) }
+    var playedMs by remember { mutableStateOf(0L) }  // सिर्फ़ असली प्ले का समय गिनता है
+
+    // ===== हर 30 मिनट के प्लेबैक पर ऐड (pause होने पर / ऐप बैकग्राउंड में होने पर टाइमर नहीं बढ़ता) =====
+    LaunchedEffect(Unit) {
+        val owner = context as? LifecycleOwner
+        while (true) {
+            delay(1000)
+            val screenVisible =
+                owner?.lifecycle?.currentState?.isAtLeast(Lifecycle.State.STARTED) ?: true
+            if (!showAd && screenVisible && exoPlayer.isPlaying) {
+                playedMs += 1000
+                if (playedMs >= AD_INTERVAL_MS) {
+                    exoPlayer.pause()      // 1. वीडियो रोकें
+                    playedMs = 0L
+                    showAd = true          // 2. ऐड खोलें
+                }
+            }
+        }
+    }
 
     // ===== Brightness (बाईं तरफ़ ऊपर/नीचे स्वाइप) =====
     var brightness by remember {
@@ -411,8 +446,78 @@ fun PlayerScreen(title: String, videoUrl: String, onBack: () -> Unit) {
         }
     }
 
+    // ===== IN-APP AD (ऐड बंद होते ही वीडियो वहीं से चालू) =====
+    if (showAd) {
+        InAppAdDialog(
+            url = AD_URL,
+            onClose = {
+                showAd = false
+                exoPlayer.play()   // 3. वीडियो वापस चालू
+            }
+        )
+    }
+
     DisposableEffect(Unit) {
         onDispose { exoPlayer.release() }
+    }
+}
+
+// ===== ऐप के अंदर खुलने वाला ऐड (WebView + Close बटन) =====
+@SuppressLint("SetJavaScriptEnabled")
+@Composable
+private fun InAppAdDialog(url: String, onClose: () -> Unit) {
+    val webHolder = remember { arrayOfNulls<WebView>(1) }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            webHolder[0]?.stopLoading()
+            webHolder[0]?.destroy()
+            webHolder[0] = null
+        }
+    }
+
+    Dialog(
+        onDismissRequest = { /* बैक दबाने से बंद नहीं होगा, Close बटन से ही बंद */ },
+        properties = DialogProperties(
+            dismissOnBackPress = false,
+            dismissOnClickOutside = false,
+            usePlatformDefaultWidth = false
+        )
+    ) {
+        Box(Modifier.fillMaxSize().background(Color.Black)) {
+            AndroidView(
+                factory = { ctx ->
+                    WebView(ctx).apply {
+                        settings.javaScriptEnabled = true
+                        settings.domStorageEnabled = true
+                        webViewClient = object : WebViewClient() {
+                            // ऐड के अंदर ही रहे; market:// intent:// जैसे बाहरी लिंक रोक दें
+                            override fun shouldOverrideUrlLoading(
+                                view: WebView?,
+                                request: WebResourceRequest?
+                            ): Boolean {
+                                val scheme = request?.url?.scheme ?: return false
+                                return scheme != "http" && scheme != "https"
+                            }
+                        }
+                        loadUrl(url)
+                        webHolder[0] = this
+                    }
+                },
+                modifier = Modifier.fillMaxSize()
+            )
+
+            IconButton(
+                onClick = onClose,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(12.dp)
+                    .clip(CircleShape)
+                    .background(Color(0xAA000000))
+            ) {
+                Icon(Icons.Default.Close, "Close", tint = Color.White)
+            }
+        }
     }
 }
 
@@ -434,87 +539,4 @@ private fun ThinSeekBar(
             .height(28.dp)
             .pointerInput(Unit) {
                 detectTapGestures { o ->
-                    done((o.x / size.width).coerceIn(0f, 1f))
-                }
-            }
-            .pointerInput(Unit) {
-                detectHorizontalDragGestures(
-                    onDragStart = { o ->
-                        dragFraction = (o.x / size.width).coerceIn(0f, 1f)
-                        change(dragFraction)
-                    },
-                    onDragEnd = { done(dragFraction) },
-                    onDragCancel = { done(dragFraction) },
-                    onHorizontalDrag = { c, _ ->
-                        c.consume()
-                        dragFraction = (c.position.x / size.width).coerceIn(0f, 1f)
-                        change(dragFraction)
-                    }
-                )
-            },
-        contentAlignment = Alignment.CenterStart
-    ) {
-        val f = fraction.coerceIn(0f, 1f)
-        Box(
-            Modifier
-                .fillMaxWidth()
-                .height(2.dp)
-                .clip(RoundedCornerShape(1.dp))
-                .background(Color(0x66FFFFFF))
-        )
-        Box(
-            Modifier
-                .fillMaxWidth(f)
-                .height(2.dp)
-                .clip(RoundedCornerShape(1.dp))
-                .background(orange)
-        )
-        Box(
-            Modifier
-                .offset(x = maxWidth * f - 6.dp)
-                .size(12.dp)
-                .clip(CircleShape)
-                .background(orange)
-        )
-    }
-}
-
-@Composable
-private fun PlayerOption(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    label: String,
-    subLabel: String = ""
-) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Icon(icon, label, tint = Color.White, modifier = Modifier.size(18.dp))
-        Spacer(Modifier.width(6.dp))
-        Column {
-            Text(
-                label,
-                color = Color.White,
-                style = MaterialTheme.typography.labelMedium,
-                fontWeight = FontWeight.SemiBold
-            )
-            if (subLabel.isNotBlank()) {
-                Text(
-                    subLabel,
-                    color = Color(0xFFBDBDBD),
-                    style = MaterialTheme.typography.labelSmall
-                )
-            }
-        }
-    }
-}
-
-private fun formatTime(ms: Long): String {
-    if (ms <= 0) return "00:00"
-    val totalSec = ms / 1000
-    val hours = totalSec / 3600
-    val minutes = (totalSec % 3600) / 60
-    val seconds = totalSec % 60
-    return if (hours > 0) {
-        String.format("%d:%02d:%02d", hours, minutes, seconds)
-    } else {
-        String.format("%02d:%02d", minutes, seconds)
-    }
-}
+      
