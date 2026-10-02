@@ -1,20 +1,15 @@
 package com.najara.app.ui
 
-import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.pm.ActivityInfo
 import android.net.Uri
 import android.provider.Settings
 import android.view.ViewGroup
 import android.view.WindowManager
-import android.webkit.WebResourceRequest
-import android.webkit.WebView
-import android.webkit.WebViewClient
 import android.widget.FrameLayout
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.*
@@ -30,14 +25,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -48,8 +40,7 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import kotlinx.coroutines.delay
 
-// ===== AD सेटिंग =====
-// टेस्ट करना हो तो 30 * 60 * 1000L की जगह 60 * 1000L (1 मिनट) कर दें
+// AD setting: for testing use 60 * 1000L (1 minute)
 private const val AD_INTERVAL_MS = 30 * 60 * 1000L
 private const val AD_URL = "https://asiafilm.org/4/600fe50678836cdbd92320c581b0107d"
 
@@ -58,7 +49,7 @@ fun PlayerScreen(title: String, videoUrl: String, onBack: () -> Unit) {
     val context = LocalContext.current
     val activity = context as? Activity
 
-    // ===== Auto Landscape + Full Screen (समय, बैटरी, नेटवर्क, नीचे के बटन सब छुपे) =====
+    // Landscape + full screen
     DisposableEffect(Unit) {
         activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
         val window = activity?.window
@@ -69,7 +60,6 @@ fun PlayerScreen(title: String, videoUrl: String, onBack: () -> Unit) {
         onDispose {
             activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
             controller?.show(WindowInsetsCompat.Type.systemBars())
-            // बाहर निकलते समय फ़ोन की असली ब्राइटनेस वापस
             window?.let {
                 val lp = it.attributes
                 lp.screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
@@ -92,14 +82,14 @@ fun PlayerScreen(title: String, videoUrl: String, onBack: () -> Unit) {
     var currentPos by remember { mutableStateOf(0L) }
     var duration by remember { mutableStateOf(0L) }
     var isDragging by remember { mutableStateOf(false) }
-    var zoomLevel by remember { mutableStateOf(0) }  // 0=Normal, 1=Medium, 2=Full
+    var zoomLevel by remember { mutableStateOf(0) }
     var zoomToast by remember { mutableStateOf("") }
 
-    // ===== AD स्टेट =====
+    // Ad state
     var showAd by remember { mutableStateOf(false) }
-    var playedMs by remember { mutableStateOf(0L) }  // सिर्फ़ असली प्ले का समय गिनता है
+    var playedMs by remember { mutableStateOf(0L) }
 
-    // ===== हर 30 मिनट के प्लेबैक पर ऐड (pause होने पर / ऐप बैकग्राउंड में होने पर टाइमर नहीं बढ़ता) =====
+    // Ad every 30 minutes of real playback
     LaunchedEffect(Unit) {
         val owner = context as? LifecycleOwner
         while (true) {
@@ -109,15 +99,15 @@ fun PlayerScreen(title: String, videoUrl: String, onBack: () -> Unit) {
             if (!showAd && screenVisible && exoPlayer.isPlaying) {
                 playedMs += 1000
                 if (playedMs >= AD_INTERVAL_MS) {
-                    exoPlayer.pause()      // 1. वीडियो रोकें
+                    exoPlayer.pause()
                     playedMs = 0L
-                    showAd = true          // 2. ऐड खोलें
+                    showAd = true
                 }
             }
         }
     }
 
-    // ===== Brightness (बाईं तरफ़ ऊपर/नीचे स्वाइप) =====
+    // Brightness
     var brightness by remember {
         mutableStateOf(
             run {
@@ -144,7 +134,6 @@ fun PlayerScreen(title: String, videoUrl: String, onBack: () -> Unit) {
         showBrightness = true
     }
 
-    // ब्राइटनेस पट्टी 1 सेकंड बाद छुपाना
     LaunchedEffect(brightness) {
         delay(1000)
         showBrightness = false
@@ -156,7 +145,6 @@ fun PlayerScreen(title: String, videoUrl: String, onBack: () -> Unit) {
         else -> 1.30f
     }
 
-    // ===== ज़ूम का नाम 1 सेकंड दिखाकर छुपाना =====
     LaunchedEffect(zoomToast) {
         if (zoomToast.isNotEmpty()) {
             delay(1200)
@@ -164,7 +152,6 @@ fun PlayerScreen(title: String, videoUrl: String, onBack: () -> Unit) {
         }
     }
 
-    // ===== Auto-hide controls (4 sec) =====
     LaunchedEffect(showControls, isLocked, isDragging, zoomLevel) {
         if (showControls && !isLocked && !isDragging) {
             delay(4000)
@@ -172,7 +159,6 @@ fun PlayerScreen(title: String, videoUrl: String, onBack: () -> Unit) {
         }
     }
 
-    // ===== Position update loop =====
     LaunchedEffect(Unit) {
         while (true) {
             if (!isDragging) currentPos = exoPlayer.currentPosition
@@ -189,7 +175,7 @@ fun PlayerScreen(title: String, videoUrl: String, onBack: () -> Unit) {
 
     Box(Modifier.fillMaxSize().background(Color.Black)) {
 
-        // ===== VIDEO (with Zoom) =====
+        // Video with zoom
         AndroidView(
             factory = {
                 PlayerView(it).apply {
@@ -209,7 +195,7 @@ fun PlayerScreen(title: String, videoUrl: String, onBack: () -> Unit) {
                 }
         )
 
-        // ===== बाईं तरफ़ ब्राइटनेस स्वाइप एरिया (लॉक में बंद) =====
+        // Left side brightness swipe area
         if (!isLocked) {
             Box(
                 Modifier
@@ -222,14 +208,13 @@ fun PlayerScreen(title: String, videoUrl: String, onBack: () -> Unit) {
                     .pointerInput(Unit) {
                         detectVerticalDragGestures { change, dragAmount ->
                             change.consume()
-                            // ऊपर ले जाओ = रोशनी बढ़े, नीचे = कम
                             applyBrightness(brightness - (dragAmount / size.height) * 1.5f)
                         }
                     }
             )
         }
 
-        // ===== TOP BAR (कोई काली पट्टी नहीं - सिर्फ gradient) =====
+        // Top bar
         if (showControls && !isLocked) {
             Row(
                 Modifier
@@ -252,10 +237,9 @@ fun PlayerScreen(title: String, videoUrl: String, onBack: () -> Unit) {
                     modifier = Modifier.weight(1f),
                     style = MaterialTheme.typography.titleMedium
                 )
-                IconButton(onClick = { /* Cast */ }) {
+                IconButton(onClick = { }) {
                     Icon(Icons.Default.Cast, "Cast", tint = Color.White)
                 }
-                // ===== ZOOM BUTTON (ऊपर, Cast के बगल में) =====
                 IconButton(onClick = {
                     zoomLevel = (zoomLevel + 1) % 3
                     zoomToast = when (zoomLevel) {
@@ -266,10 +250,10 @@ fun PlayerScreen(title: String, videoUrl: String, onBack: () -> Unit) {
                 }) {
                     Icon(Icons.Default.AspectRatio, "Zoom", tint = Color.White)
                 }
-                IconButton(onClick = { /* Volume */ }) {
+                IconButton(onClick = { }) {
                     Icon(Icons.Default.VolumeUp, "Volume", tint = Color.White)
                 }
-                IconButton(onClick = { /* Share */ }) {
+                IconButton(onClick = { }) {
                     Icon(Icons.Default.Share, "Share", tint = Color.White)
                 }
                 IconButton(onClick = { isLocked = true }) {
@@ -278,7 +262,7 @@ fun PlayerScreen(title: String, videoUrl: String, onBack: () -> Unit) {
             }
         }
 
-        // ===== UNLOCK BUTTON (सिर्फ Locked में) =====
+        // Unlock button
         if (isLocked) {
             IconButton(
                 onClick = { isLocked = false },
@@ -297,17 +281,15 @@ fun PlayerScreen(title: String, videoUrl: String, onBack: () -> Unit) {
             }
         }
 
-        // ===== CENTER CONTROLS =====
+        // Center controls
         if (showControls && !isLocked) {
             Row(
                 Modifier.align(Alignment.Center),
                 horizontalArrangement = Arrangement.spacedBy(24.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // -10s
                 IconButton(onClick = {
-                    val newPos = (exoPlayer.currentPosition - 10000).coerceAtLeast(0)
-                    exoPlayer.seekTo(newPos)
+                    exoPlayer.seekTo((exoPlayer.currentPosition - 10000).coerceAtLeast(0))
                 }) {
                     Icon(
                         Icons.Default.Replay10, "Back10",
@@ -315,7 +297,6 @@ fun PlayerScreen(title: String, videoUrl: String, onBack: () -> Unit) {
                         modifier = Modifier.size(48.dp)
                     )
                 }
-                // Play/Pause
                 IconButton(onClick = {
                     if (exoPlayer.isPlaying) exoPlayer.pause() else exoPlayer.play()
                     isPlaying = exoPlayer.isPlaying
@@ -327,10 +308,8 @@ fun PlayerScreen(title: String, videoUrl: String, onBack: () -> Unit) {
                         modifier = Modifier.size(72.dp)
                     )
                 }
-                // +10s
                 IconButton(onClick = {
-                    val newPos = (exoPlayer.currentPosition + 10000).coerceAtMost(duration)
-                    exoPlayer.seekTo(newPos)
+                    exoPlayer.seekTo((exoPlayer.currentPosition + 10000).coerceAtMost(duration))
                 }) {
                     Icon(
                         Icons.Default.Forward10, "Fwd10",
@@ -341,7 +320,7 @@ fun PlayerScreen(title: String, videoUrl: String, onBack: () -> Unit) {
             }
         }
 
-        // ===== ब्राइटनेस पट्टी (सूरज + खड़ी लाइन) =====
+        // Brightness bar
         if (showBrightness && !isLocked) {
             Column(
                 Modifier
@@ -374,7 +353,7 @@ fun PlayerScreen(title: String, videoUrl: String, onBack: () -> Unit) {
             }
         }
 
-        // ===== ZOOM का नाम (Normal / Medium / Full) =====
+        // Zoom name
         if (zoomToast.isNotEmpty()) {
             Text(
                 zoomToast,
@@ -389,7 +368,7 @@ fun PlayerScreen(title: String, videoUrl: String, onBack: () -> Unit) {
             )
         }
 
-        // ===== BOTTOM BAR (कोई काली पट्टी नहीं - सिर्फ gradient) =====
+        // Bottom bar
         if (showControls && !isLocked) {
             Column(
                 Modifier
@@ -402,15 +381,14 @@ fun PlayerScreen(title: String, videoUrl: String, onBack: () -> Unit) {
                     )
                     .padding(horizontal = 16.dp, vertical = 10.dp)
             ) {
-                // ===== पतली Progress Bar =====
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        formatTime(currentPos),
+                        playerFormatTime(currentPos),
                         color = Color.White,
                         style = MaterialTheme.typography.labelSmall
                     )
                     Spacer(Modifier.width(10.dp))
-                    ThinSeekBar(
+                    PlayerSeekBar(
                         fraction = if (duration > 0) currentPos.toFloat() / duration else 0f,
                         onSeekChange = { f ->
                             isDragging = true
@@ -424,7 +402,7 @@ fun PlayerScreen(title: String, videoUrl: String, onBack: () -> Unit) {
                     )
                     Spacer(Modifier.width(10.dp))
                     Text(
-                        formatTime(duration),
+                        playerFormatTime(duration),
                         color = Color.White,
                         style = MaterialTheme.typography.labelSmall
                     )
@@ -432,28 +410,27 @@ fun PlayerScreen(title: String, videoUrl: String, onBack: () -> Unit) {
 
                 Spacer(Modifier.height(4.dp))
 
-                // ===== Bottom Options =====
                 Row(
                     Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceEvenly
                 ) {
-                    PlayerOption(Icons.Default.Movie, "Recommended")
-                    PlayerOption(Icons.Default.HighQuality, "Quality", "Auto")
-                    PlayerOption(Icons.Default.MusicNote, "Audio")
-                    PlayerOption(Icons.Default.SkipNext, "Next")
-                    PlayerOption(Icons.Default.Speed, "Speed", "Normal")
+                    PlayerOptionItem(Icons.Default.Movie, "Recommended")
+                    PlayerOptionItem(Icons.Default.HighQuality, "Quality", "Auto")
+                    PlayerOptionItem(Icons.Default.MusicNote, "Audio")
+                    PlayerOptionItem(Icons.Default.SkipNext, "Next")
+                    PlayerOptionItem(Icons.Default.Speed, "Speed", "Normal")
                 }
             }
         }
     }
 
-    // ===== IN-APP AD (ऐड बंद होते ही वीडियो वहीं से चालू) =====
+    // In-app ad: video resumes when ad is closed
     if (showAd) {
-        InAppAdDialog(
+        AdOverlayDialog(
             url = AD_URL,
             onClose = {
                 showAd = false
-                exoPlayer.play()   // 3. वीडियो वापस चालू
+                exoPlayer.play()
             }
         )
     }
@@ -462,11 +439,36 @@ fun PlayerScreen(title: String, videoUrl: String, onBack: () -> Unit) {
         onDispose { exoPlayer.release() }
     }
 }
+package com.najara.app.ui
 
-// ===== ऐप के अंदर खुलने वाला ऐड (WebView + Close बटन) =====
+import android.annotation.SuppressLint
+import android.webkit.WebResourceRequest
+import android.webkit.WebView
+import android.webkit.WebViewClient
+import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+
+// In-app ad (WebView + Close button)
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
-private fun InAppAdDialog(url: String, onClose: () -> Unit) {
+internal fun AdOverlayDialog(url: String, onClose: () -> Unit) {
     val webHolder = remember { arrayOfNulls<WebView>(1) }
 
     DisposableEffect(Unit) {
@@ -478,7 +480,7 @@ private fun InAppAdDialog(url: String, onClose: () -> Unit) {
     }
 
     Dialog(
-        onDismissRequest = { /* बैक दबाने से बंद नहीं होगा, Close बटन से ही बंद */ },
+        onDismissRequest = { },
         properties = DialogProperties(
             dismissOnBackPress = false,
             dismissOnClickOutside = false,
@@ -492,7 +494,6 @@ private fun InAppAdDialog(url: String, onClose: () -> Unit) {
                         settings.javaScriptEnabled = true
                         settings.domStorageEnabled = true
                         webViewClient = object : WebViewClient() {
-                            // ऐड के अंदर ही रहे; market:// intent:// जैसे बाहरी लिंक रोक दें
                             override fun shouldOverrideUrlLoading(
                                 view: WebView?,
                                 request: WebResourceRequest?
@@ -522,9 +523,9 @@ private fun InAppAdDialog(url: String, onClose: () -> Unit) {
     }
 }
 
-// ===== पतली सीक-बार: पतली लाइन + छोटा नारंगी बिंदु =====
+// Thin seek bar: thin line + small orange dot
 @Composable
-private fun ThinSeekBar(
+internal fun PlayerSeekBar(
     fraction: Float,
     onSeekChange: (Float) -> Unit,
     onSeekDone: (Float) -> Unit,
@@ -537,4 +538,89 @@ private fun ThinSeekBar(
     val orange = Color(0xFFFFA500)
 
     BoxWithConstraints(
-        modifie
+        modifier
+            .height(28.dp)
+            .pointerInput(Unit) {
+                detectTapGestures { o ->
+                    val f = (o.x / size.width).coerceIn(0f, 1f)
+                    change(f)
+                    done(f)
+                }
+            }
+            .pointerInput(Unit) {
+                detectHorizontalDragGestures(
+                    onDragStart = { o ->
+                        dragging = true
+                        dragFraction = (o.x / size.width).coerceIn(0f, 1f)
+                        change(dragFraction)
+                    },
+                    onDragEnd = {
+                        dragging = false
+                        done(dragFraction)
+                    },
+                    onDragCancel = {
+                        dragging = false
+                        done(dragFraction)
+                    },
+                    onHorizontalDrag = { c, _ ->
+                        c.consume()
+                        dragFraction = (c.position.x / size.width).coerceIn(0f, 1f)
+                        change(dragFraction)
+                    }
+                )
+            },
+        contentAlignment = Alignment.CenterStart
+    ) {
+        val shown = (if (dragging) dragFraction else fraction).coerceIn(0f, 1f)
+        val dotSize = 12.dp
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(2.dp)
+                .background(Color(0x55FFFFFF))
+        )
+        Box(
+            Modifier
+                .fillMaxWidth(shown)
+                .height(2.dp)
+                .background(orange)
+        )
+        Box(
+            Modifier
+                .offset(x = (maxWidth - dotSize) * shown)
+                .size(dotSize)
+                .clip(CircleShape)
+                .background(orange)
+        )
+    }
+}
+
+// One bottom option (icon + label)
+@Composable
+internal fun PlayerOptionItem(icon: ImageVector, label: String, sub: String? = null) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Icon(icon, label, tint = Color.White, modifier = Modifier.size(22.dp))
+        Text(
+            label,
+            color = Color.White,
+            style = MaterialTheme.typography.labelSmall
+        )
+        if (sub != null) {
+            Text(
+                sub,
+                color = Color(0xFFFFA500),
+                style = MaterialTheme.typography.labelSmall
+            )
+        }
+    }
+}
+
+// Time format: 01:23 or 1:02:03
+internal fun playerFormatTime(ms: Long): String {
+    val totalSec = (ms / 1000).coerceAtLeast(0)
+    val h = totalSec / 3600
+    val m = (totalSec % 3600) / 60
+    val s = totalSec % 60
+    return if (h > 0) String.format("%d:%02d:%02d", h, m, s)
+    else String.format("%02d:%02d", m, s)
+}
