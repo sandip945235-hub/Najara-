@@ -30,6 +30,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -532,11 +533,8 @@ private fun ThinSeekBar(
     val change by rememberUpdatedState(onSeekChange)
     val done by rememberUpdatedState(onSeekDone)
     var dragFraction by remember { mutableStateOf(0f) }
+    var dragging by remember { mutableStateOf(false) }
     val orange = Color(0xFFFFA500)
 
     BoxWithConstraints(
-        modifier
-            .height(28.dp)
-            .pointerInput(Unit) {
-                detectTapGestures { o ->
-      
+        modifie
