@@ -13,6 +13,9 @@ object ShareHelper {
     private const val KEY_LAST_SHOWN = "last_shown_time"
     private const val INTERVAL_MS = 48L * 60 * 60 * 1000 // 48 घंटे
 
+    // शेयर होने वाली APK का नाम
+    private const val SHARED_APK_NAME = "Najara.apk"
+
     // ⚠️ यहाँ अपना APK download link डालो
     // Google Drive link, या अपनी website का link, या Play Store link
     private const val APP_DOWNLOAD_LINK = "https://play.google.com/store/apps/details?id=com.najara.app"
@@ -57,16 +60,20 @@ object ShareHelper {
 
     /**
      * App की APK share करने का function
+     * इंस्टॉल की गई base.apk को पहले Najara.apk नाम से कॉपी करता है, फिर शेयर करता है
      */
     fun shareApk(context: Context) {
         try {
-            val apkPath = context.packageCodePath
-            val apkFile = File(apkPath)
+            val original = File(context.packageCodePath)
 
-            if (!apkFile.exists()) {
+            if (!original.exists()) {
                 shareAppLink(context)
                 return
             }
+
+            // कैश फ़ोल्डर में Najara.apk नाम से कॉपी
+            val apkFile = File(context.cacheDir, SHARED_APK_NAME)
+            original.copyTo(apkFile, overwrite = true)
 
             val uri: Uri = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
                 FileProvider.getUriForFile(
