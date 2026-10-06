@@ -35,7 +35,7 @@ private fun loadProgress(
     list.associate { it.id to DownloadStore.query(context, it.id) }
 
 private fun formatBytes(b: Long): String {
-    if (b <= 0L) return "0 MB"
+    if (b <= 0) return "0 MB"
     val mb = b / (1024.0 * 1024.0)
     return if (mb >= 1024) String.format(Locale.US, "%.2f GB", mb / 1024)
     else String.format(Locale.US, "%.1f MB", mb)
@@ -44,14 +44,14 @@ private fun formatBytes(b: Long): String {
 @Composable
 fun DownloadsScreen(navController: NavController) {
     val context = LocalContext.current
-    var downloadItems by remember { mutableStateOf(DownloadStore.getAll(context)) }
-    var progress by remember { mutableStateOf(loadProgress(context, downloadItems)) }
+    var items by remember { mutableStateOf(DownloadStore.getAll(context)) }
+    var progress by remember { mutableStateOf(loadProgress(context, items)) }
 
     // हर सेकंड प्रोग्रेस अपडेट
     LaunchedEffect(Unit) {
         while (true) {
             val list = DownloadStore.getAll(context)
-            downloadItems = list
+            items = list
             progress = loadProgress(context, list)
             delay(1000)
         }
@@ -85,7 +85,7 @@ fun DownloadsScreen(navController: NavController) {
                 .fillMaxSize()
                 .background(Color.Black)
         ) {
-            if (downloadItems.isEmpty()) {
+            if (items.isEmpty()) {
                 Column(
                     Modifier.align(Alignment.Center),
                     horizontalAlignment = Alignment.CenterHorizontally
@@ -115,7 +115,7 @@ fun DownloadsScreen(navController: NavController) {
                     contentPadding = PaddingValues(12.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    items(downloadItems, key = { it.id }) { item ->
+                    items(items, key = { it.id }) { item ->
                         val p = progress[item.id]
                         val file = DownloadStore.fileFor(context, item.fileName)
                         val done = p?.status == DownloadManager.STATUS_SUCCESSFUL ||
@@ -123,8 +123,8 @@ fun DownloadsScreen(navController: NavController) {
                         val failed = p?.status == DownloadManager.STATUS_FAILED ||
                                 (p == null && !file.exists())
                         val paused = p?.status == DownloadManager.STATUS_PAUSED
-                        val frac: Float = if (p != null && p.total > 0)
-                            (p.downloaded.toFloat() / p.total.toFloat()).coerceIn(0f, 1f) else 0f
+                        val frac = if (p != null && p.total > 0)
+                            (p.downloaded.toFloat() / p.total).coerceIn(0f, 1f) else 0f
 
                         Row(
                             Modifier
@@ -155,7 +155,7 @@ fun DownloadsScreen(navController: NavController) {
                                     )
                                     else -> {
                                         LinearProgressIndicator(
-                                            progress = frac,
+                                            progress = { frac },
                                             modifier = Modifier.fillMaxWidth(),
                                             color = Color(0xFFE50914),
                                             trackColor = Color(0xFF333333)
@@ -163,7 +163,7 @@ fun DownloadsScreen(navController: NavController) {
                                         Spacer(Modifier.height(4.dp))
                                         Text(
                                             if (paused) "रुका है — नेटवर्क का इंतज़ार"
-                                            else "${(frac * 100).toInt()}% • ${formatBytes(p?.downloaded ?: 0L)} / ${formatBytes(p?.total ?: 0L)}",
+                                            else "${(frac * 100).toInt()}% • ${formatBytes(p?.downloaded ?: 0)} / ${formatBytes(p?.total ?: 0)}",
                                             color = Color.Gray,
                                             style = MaterialTheme.typography.bodySmall
                                         )
@@ -186,7 +186,7 @@ fun DownloadsScreen(navController: NavController) {
                             }
                             IconButton(onClick = {
                                 DownloadStore.remove(context, item)
-                                downloadItems = DownloadStore.getAll(context)
+                                items = DownloadStore.getAll(context)
                             }) {
                                 Icon(Icons.Default.Delete, "Delete", tint = Color(0xFFE50914))
                             }
