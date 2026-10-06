@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "993144211949",
+    "project_id": "najara-82aea",
+    "storage_bucket": "najara-82aea.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:993144211949:android:84088cd40775d3707fffe4",
+        "android_client_info": {
+          "package_name": "com.najara.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAfJTpPO7W5WZJmVArOAOdtTlRlQTSl4Kc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
