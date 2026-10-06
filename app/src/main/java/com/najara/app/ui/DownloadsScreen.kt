@@ -1,129 +1,199 @@
-package com.najara.app.data
+package com.najara.app.ui
 
 import android.app.DownloadManager
 import android.content.Context
-import android.os.Environment
-import org.json.JSONArray
-import org.json.JSONObject
-import java.io.File
+import android.net.Uri
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.navigation.NavController
+import com.najara.app.data.DownloadItem
+import com.najara.app.data.DownloadProgress
+import com.najara.app.data.DownloadStore
+import kotlinx.coroutines.delay
+import java.util.Locale
 
-data class DownloadItem(
-    val id: Long,
-    val title: String,
-    val fileName: String,
-    val addedAt: Long = 0L
-)
+private fun loadProgress(
+    context: Context,
+    list: List<DownloadItem>
+): Map<Long, DownloadProgress?> =
+    list.associate { it.id to DownloadStore.query(context, it.id) }
 
-data class DownloadProgress(
-    val status: Int,
-    val downloaded: Long,
-    val total: Long
-)
+private fun formatBytes(b: Long): String {
+    if (b <= 0L) return "0 MB"
+    val mb = b / (1024.0 * 1024.0)
+    return if (mb >= 1024) String.format(Locale.US, "%.2f GB", mb / 1024)
+    else String.format(Locale.US, "%.1f MB", mb)
+}
 
-object DownloadStore {
+@Composable
+fun DownloadsScreen(navController: NavController) {
+    val context = LocalContext.current
+    var downloadItems by remember { mutableStateOf(DownloadStore.getAll(context)) }
+    var progress by remember { mutableStateOf(loadProgress(context, downloadItems)) }
 
-    private const val PREFS = "najara_downloads"
-    private const val KEY = "items"
+    // हर सेकंड प्रोग्रेस अपडेट
+    LaunchedEffect(Unit) {
+        while (true) {
+            val list = DownloadStore.getAll(context)
+            downloadItems = list
+            progress = loadProgress(context, list)
+            delay(1000)
+        }
+    }
 
-    fun getAll(context: Context): List<DownloadItem> {
-        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        val raw = prefs.getString(KEY, null) ?: return emptyList()
-        return try {
-            val arr = JSONArray(raw)
-            (0 until arr.length()).map { i ->
-                val o = arr.getJSONObject(i)
-                DownloadItem(
-                    id = o.getLong("id"),
-                    title = o.optString("title"),
-                    fileName = o.optString("fileName"),
-                    addedAt = o.optLong("addedAt", 0L)
+    Scaffold(
+        containerColor = Color.Black,
+        topBar = {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .background(Color.Black)
+                    .padding(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = { navController.popBackStack() }) {
+                    Icon(Icons.Default.ArrowBack, "Back", tint = Color.White)
+                }
+                Text(
+                    "Downloads",
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.titleLarge
                 )
-            }.sortedByDescending { it.addedAt }
-        } catch (e: Exception) {
-            emptyList()
-        }
-    }
-
-    private fun saveAll(context: Context, list: List<DownloadItem>) {
-        val arr = JSONArray()
-        list.forEach {
-            arr.put(
-                JSONObject()
-                    .put("id", it.id)
-                    .put("title", it.title)
-                    .put("fileName", it.fileName)
-                    .put("addedAt", it.addedAt)
-            )
-        }
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .edit()
-            .putString(KEY, arr.toString())
-            .apply()
-    }
-
-    fun add(context: Context, item: DownloadItem) {
-        val list = getAll(context).filter { it.id != item.id } + item
-        saveAll(context, list)
-    }
-
-    fun makeFileName(title: String, url: String): String {
-        val clean = title
-            .replace(Regex("[\\\\/:*?\"<>|]"), "_")
-            .trim()
-            .ifEmpty { "movie" }
-        val rawExt = url.substringBefore('?').substringAfterLast('.', "")
-        val ext = if (rawExt.length in 2..4 && rawExt.all { it.isLetterOrDigit() }) {
-            rawExt.lowercase()
-        } else {
-            "mp4"
-        }
-        return if (clean.lowercase().endsWith(".$ext")) clean else "$clean.$ext"
-    }
-
-    fun fileFor(context: Context, fileName: String): File {
-        val dir = context.getExternalFilesDir(Environment.DIRECTORY_MOVIES)
-            ?: context.filesDir
-        return File(dir, fileName)
-    }
-
-    fun clearExisting(context: Context, fileName: String) {
-        try {
-            val f = fileFor(context, fileName)
-            if (f.exists()) f.delete()
-        } catch (e: Exception) {
-        }
-    }
-
-    fun query(context: Context, id: Long): DownloadProgress? {
-        return try {
-            val dm = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
-            val cursor = dm.query(DownloadManager.Query().setFilterById(id)) ?: return null
-            cursor.use {
-                if (!it.moveToFirst()) return null
-                val status = it.getInt(it.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))
-                val downloaded = it.getLong(
-                    it.getColumnIndexOrThrow(DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR)
-                )
-                val total = it.getLong(
-                    it.getColumnIndexOrThrow(DownloadManager.COLUMN_TOTAL_SIZE_BYTES)
-                )
-                DownloadProgress(status, downloaded, total)
             }
-        } catch (e: Exception) {
-            null
         }
-    }
+    ) { padding ->
+        Box(
+            Modifier
+                .padding(padding)
+                .fillMaxSize()
+                .background(Color.Black)
+        ) {
+            if (downloadItems.isEmpty()) {
+                Column(
+                    Modifier.align(Alignment.Center),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Icon(
+                        Icons.Default.PlayArrow,
+                        "Empty",
+                        tint = Color.Gray,
+                        modifier = Modifier.size(64.dp)
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    Text(
+                        "कोई डाउनलोड नहीं",
+                        color = Color.Gray,
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "जो मूवी डाउनलोड करेंगे, वो यहाँ दिखेंगी",
+                        color = Color.DarkGray,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+            } else {
+                LazyColumn(
+                    Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    items(downloadItems, key = { it.id }) { item ->
+                        val p = progress[item.id]
+                        val file = DownloadStore.fileFor(context, item.fileName)
+                        val done = p?.status == DownloadManager.STATUS_SUCCESSFUL ||
+                                (p == null && file.exists())
+                        val failed = p?.status == DownloadManager.STATUS_FAILED ||
+                                (p == null && !file.exists())
+                        val paused = p?.status == DownloadManager.STATUS_PAUSED
+                        val frac: Float = if (p != null && p.total > 0)
+                            (p.downloaded.toFloat() / p.total.toFloat()).coerceIn(0f, 1f) else 0f
 
-    fun remove(context: Context, item: DownloadItem) {
-        try {
-            val dm = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
-            dm.remove(item.id)
-        } catch (e: Exception) {
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(Color(0xFF1A1A1A))
+                                .padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(Modifier.weight(1f)) {
+                                Text(
+                                    item.title,
+                                    color = Color.White,
+                                    fontWeight = FontWeight.SemiBold,
+                                    maxLines = 2
+                                )
+                                Spacer(Modifier.height(6.dp))
+                                when {
+                                    done -> Text(
+                                        "डाउनलोड पूरा • ${formatBytes(file.length())}",
+                                        color = Color(0xFF4CAF50),
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                    failed -> Text(
+                                        "डाउनलोड फेल हुआ",
+                                        color = Color(0xFFE53935),
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                    else -> {
+                                        LinearProgressIndicator(
+                                            progress = frac,
+                                            modifier = Modifier.fillMaxWidth(),
+                                            color = Color(0xFFE50914),
+                                            trackColor = Color(0xFF333333)
+                                        )
+                                        Spacer(Modifier.height(4.dp))
+                                        Text(
+                                            if (paused) "रुका है — नेटवर्क का इंतज़ार"
+                                            else "${(frac * 100).toInt()}% • ${formatBytes(p?.downloaded ?: 0L)} / ${formatBytes(p?.total ?: 0L)}",
+                                            color = Color.Gray,
+                                            style = MaterialTheme.typography.bodySmall
+                                        )
+                                    }
+                                }
+                            }
+                            if (done) {
+                                IconButton(onClick = {
+                                    val t = Uri.encode(item.title)
+                                    val u = Uri.encode(Uri.fromFile(file).toString())
+                                    navController.navigate("player/$t/$u")
+                                }) {
+                                    Icon(
+                                        Icons.Default.PlayArrow,
+                                        "Play",
+                                        tint = Color(0xFFFFA500),
+                                        modifier = Modifier.size(32.dp)
+                                    )
+                                }
+                            }
+                            IconButton(onClick = {
+                                DownloadStore.remove(context, item)
+                                downloadItems = DownloadStore.getAll(context)
+                            }) {
+                                Icon(Icons.Default.Delete, "Delete", tint = Color(0xFFE50914))
+                            }
+                        }
+                    }
+                }
+            }
         }
-        try {
-            fileFor(context, item.fileName).delete()
-        } catch (e: Exception) {
-        }
-        saveAll(context, getAll(context).filter { it.id != item.id })
     }
 }
