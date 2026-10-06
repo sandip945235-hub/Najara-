@@ -1,7 +1,10 @@
 package com.najara.app.ui
 
 import android.Manifest
+import android.content.Context
 import android.content.pm.PackageManager
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -27,6 +30,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
@@ -40,6 +44,20 @@ import com.najara.app.data.Movie
 import com.najara.app.data.MovieRepository
 import com.najara.app.data.NotificationStore
 import com.najara.app.data.ShareHelper
+import kotlinx.coroutines.delay
+
+// इंटरनेट चालू है या नहीं
+private fun isNetworkAvailable(context: Context): Boolean {
+    return try {
+        val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        val net = cm.activeNetwork ?: return false
+        val caps = cm.getNetworkCapabilities(net) ?: return false
+        caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
+                caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+    } catch (e: Exception) {
+        true
+    }
+}
 
 @Composable
 fun HomeScreen(navController: NavController) {
@@ -48,6 +66,15 @@ fun HomeScreen(navController: NavController) {
     var movies by remember { mutableStateOf<List<Movie>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
     var currentTab by remember { mutableStateOf("home") }
+
+    // ===== इंटरनेट की स्थिति (हर 3 सेकंड में जाँच) =====
+    var isOnline by remember { mutableStateOf(isNetworkAvailable(context)) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            isOnline = isNetworkAvailable(context)
+            delay(3000)
+        }
+    }
 
     // ===== Share Dialog (48 hours) =====
     var showShareDialog by remember { mutableStateOf(false) }
@@ -59,7 +86,10 @@ fun HomeScreen(navController: NavController) {
 
     LaunchedEffect(Unit) {
         NajaraMessagingService.createChannel(context)
-        FirebaseMessaging.getInstance().subscribeToTopic("all")
+        try {
+            FirebaseMessaging.getInstance().subscribeToTopic("all")
+        } catch (e: Exception) {
+        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             ContextCompat.checkSelfPermission(
                 context, Manifest.permission.POST_NOTIFICATIONS
@@ -85,10 +115,22 @@ fun HomeScreen(navController: NavController) {
     val notifVersion = NotificationStore.version.value
     val unreadCount = remember(notifVersion) { NotificationStore.unreadCount(context) }
 
-    LaunchedEffect(Unit) {
-        movies = repo.fetchMovies()
+    // मूवी लिस्ट: इंटरनेट हो तभी लाओ, गड़बड़ी पर ऐप बंद न हो
+    LaunchedEffect(isOnline) {
+        if (isOnline) {
+            if (movies.isEmpty()) {
+                loading = true
+                movies = try {
+                    repo.fetchMovies()
+                } catch (e: Exception) {
+                    emptyList()
+                }
+            }
+        }
         loading = false
+    }
 
+    LaunchedEffect(Unit) {
         // 48 घंटे बाद share popup दिखाओ
         if (ShareHelper.shouldShowDialog(context)) {
             showShareDialog = true
@@ -205,17 +247,19 @@ fun HomeScreen(navController: NavController) {
                 .fillMaxSize()
                 .background(Color.Black)
         ) {
-            if (loading) {
+            if (loading && isOnline) {
                 CircularProgressIndicator(
                     color = Color(0xFFE50914),
                     modifier = Modifier.align(Alignment.Center)
                 )
             } else if (movies.isEmpty()) {
-                Text(
-                    "कोई मूवी नहीं मिली",
-                    color = Color.Gray,
-                    modifier = Modifier.align(Alignment.Center)
-                )
+                if (isOnline) {
+                    Text(
+                        "कोई मूवी नहीं मिली",
+                        color = Color.Gray,
+                        modifier = Modifier.align(Alignment.Center)
+                    )
+                }
             } else {
                 LazyVerticalGrid(
                     columns = GridCells.Fixed(3),
@@ -241,6 +285,46 @@ fun HomeScreen(navController: NavController) {
                                     .clip(RoundedCornerShape(8.dp))
                             )
                         }
+                    }
+                }
+            }
+
+            // ===== इंटरनेट नहीं है: संदेश + Downloads का रास्ता =====
+            if (!isOnline) {
+                Column(
+                    Modifier
+                        .align(if (movies.isEmpty()) Alignment.Center else Alignment.BottomCenter)
+                        .padding(16.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Color(0xFF1A1A1A))
+                        .padding(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        "इंटरनेट से नहीं जुड़े हैं",
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.titleMedium,
+                        textAlign = TextAlign.Center
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "डाउनलोड किए हुए वीडियो देखने के लिए ऊपर Downloads आइकन दबाएँ",
+                        color = Color.LightGray,
+                        style = MaterialTheme.typography.bodyMedium,
+                        textAlign = TextAlign.Center
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    Button(
+                        onClick = { navController.navigate("downloads") },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFFE50914)
+                        ),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Icon(Icons.Default.Download, "Downloads", tint = Color.White)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Downloads खोलें", color = Color.White, fontWeight = FontWeight.Bold)
                     }
                 }
             }
