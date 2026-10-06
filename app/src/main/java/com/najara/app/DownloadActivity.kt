@@ -12,6 +12,8 @@ import android.widget.LinearLayout
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import com.najara.app.data.DownloadItem
+import com.najara.app.data.DownloadStore
 
 class DownloadActivity : AppCompatActivity() {
 
@@ -119,8 +121,8 @@ class DownloadActivity : AppCompatActivity() {
         }
     }
 
-    // 1DM इंस्टॉल है या नहीं, यह चेक करें
-    private fun is1DMInstalled(): Boolean {
+    // इंस्टॉल किए हुए 1DM का पैकेज नाम (नहीं है तो null)
+    private fun find1DMPackage(): String? {
         val packages = listOf(
             "idm.internet.download.manager",
             "idm.internet.download.manager.plus",
@@ -129,21 +131,39 @@ class DownloadActivity : AppCompatActivity() {
         for (pkg in packages) {
             try {
                 packageManager.getPackageInfo(pkg, 0)
-                return true
+                return pkg
             } catch (e: Exception) {
                 // अगला पैकेज चेक करें
             }
         }
-        return false
+        return null
     }
 
-    // 1DM Check + Open
+    // 1DM Check + सीधे 1DM में लिंक खोलो
     private fun checkAndOpen1DM(url: String) {
-        if (is1DMInstalled()) {
-            try {
-                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
-            } catch (e: Exception) {
-                Toast.makeText(this, "1DM नहीं खुल पाया", Toast.LENGTH_SHORT).show()
+        val pkg = find1DMPackage()
+        if (pkg != null) {
+            val uri = Uri.parse(url)
+            val attempts = listOf(
+                Intent(Intent.ACTION_VIEW, uri).setPackage(pkg),
+                Intent(Intent.ACTION_VIEW).setDataAndType(uri, "video/*").setPackage(pkg)
+            )
+            var opened = false
+            for (intent in attempts) {
+                try {
+                    startActivity(intent)
+                    opened = true
+                    break
+                } catch (e: Exception) {
+                    // अगला तरीका आज़माएँ
+                }
+            }
+            if (!opened) {
+                Toast.makeText(
+                    this,
+                    "1DM में लिंक नहीं खुला, Regular Download चुनें",
+                    Toast.LENGTH_LONG
+                ).show()
             }
         } else {
             AlertDialog.Builder(this)
@@ -174,21 +194,38 @@ class DownloadActivity : AppCompatActivity() {
         }
     }
 
-    // In-App Download (DownloadManager)
-    private fun startInAppDownload(url: String, fileName: String) {
+    // In-App Download: फ़ाइल ऐप के अपने फ़ोल्डर में उतरती है और Downloads पेज में दिखती है
+    private fun startInAppDownload(url: String, title: String) {
         try {
+            val fileName = DownloadStore.makeFileName(title, url)
+            DownloadStore.clearExisting(this, fileName)
+
             val request = DownloadManager.Request(Uri.parse(url)).apply {
-                setTitle(fileName)
+                setTitle(title)
                 setDescription("डाउनलोड हो रही है...")
                 setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-                setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, "MyMovieApp/$fileName")
+                setDestinationInExternalFilesDir(
+                    this@DownloadActivity,
+                    Environment.DIRECTORY_MOVIES,
+                    fileName
+                )
                 setAllowedOverMetered(true)
                 setAllowedOverRoaming(true)
             }
             val dm = getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
-            dm.enqueue(request)
+            val id = dm.enqueue(request)
 
-            Toast.makeText(this, "डाउनलोड शुरू! नोटिफिकेशन देखें।", Toast.LENGTH_LONG).show()
+            DownloadStore.add(
+                this,
+                DownloadItem(id, title, fileName, System.currentTimeMillis())
+            )
+
+            Toast.makeText(
+                this,
+                "डाउनलोड शुरू! ऊपर Downloads आइकन में देखें।",
+                Toast.LENGTH_LONG
+            ).show()
+            finish()
         } catch (e: Exception) {
             Toast.makeText(this, "त्रुटि: ${e.message}", Toast.LENGTH_SHORT).show()
         }
