@@ -1,6 +1,7 @@
 package com.najara.app.ui
 
 import android.content.Intent
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -237,12 +238,20 @@ fun MovieDetailScreen(navController: NavController, movieTitle: String) {
         ) {
             ActionIcon(Icons.Default.FavoriteBorder, "Like") { }
             ActionIcon(Icons.Default.Download, "Download") {
-                // ✅ DownloadActivity खोलो
-                val intent = Intent(context, DownloadActivity::class.java).apply {
-                    putExtra("movie_title", m.title)
-                    putExtra("movie_url", m.embedLink)
+                // ✅ DownloadActivity खोलो — डाउनलोड के लिए DownloadLink भेजो (EmbedLink नहीं)
+                if (m.downloadLink.isBlank()) {
+                    Toast.makeText(
+                        context,
+                        "इस मूवी का डाउनलोड लिंक उपलब्ध नहीं है",
+                        Toast.LENGTH_LONG
+                    ).show()
+                } else {
+                    val intent = Intent(context, DownloadActivity::class.java).apply {
+                        putExtra("movie_title", m.title)
+                        putExtra("movie_url", m.downloadLink)
+                    }
+                    context.startActivity(intent)
                 }
-                context.startActivity(intent)
             }
             ActionIcon(Icons.Default.Add, "My List") { }
             ActionIcon(Icons.Default.Share, "Share") {
