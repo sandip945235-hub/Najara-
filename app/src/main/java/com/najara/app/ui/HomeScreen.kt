@@ -1,9 +1,15 @@
 package com.najara.app.ui
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Download
@@ -22,10 +28,17 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.LifecycleOwner
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
+import com.google.firebase.messaging.FirebaseMessaging
+import com.najara.app.NajaraMessagingService
 import com.najara.app.data.Movie
 import com.najara.app.data.MovieRepository
+import com.najara.app.data.NotificationStore
 import com.najara.app.data.ShareHelper
 
 @Composable
@@ -38,6 +51,39 @@ fun HomeScreen(navController: NavController) {
 
     // ===== Share Dialog (48 hours) =====
     var showShareDialog by remember { mutableStateOf(false) }
+
+    // ===== Notifications: अनुमति + ग्रुप + लाल निशान =====
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { }
+
+    LaunchedEffect(Unit) {
+        NajaraMessagingService.createChannel(context)
+        FirebaseMessaging.getInstance().subscribeToTopic("all")
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(
+                context, Manifest.permission.POST_NOTIFICATIONS
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+        NotificationStore.syncFromTray(context)
+    }
+
+    // ऐप वापस खुलने पर स्टेटस बार की नई नोटिफिकेशन जोड़ो
+    DisposableEffect(Unit) {
+        val owner = context as? LifecycleOwner
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                NotificationStore.syncFromTray(context)
+            }
+        }
+        owner?.lifecycle?.addObserver(observer)
+        onDispose { owner?.lifecycle?.removeObserver(observer) }
+    }
+
+    val notifVersion = NotificationStore.version.value
+    val unreadCount = remember(notifVersion) { NotificationStore.unreadCount(context) }
 
     LaunchedEffect(Unit) {
         movies = repo.fetchMovies()
@@ -70,11 +116,22 @@ fun HomeScreen(navController: NavController) {
                     IconButton(onClick = {
                         navController.navigate("notifications")
                     }) {
-                        Icon(
-                            Icons.Default.Notifications,
-                            contentDescription = "Notifications",
-                            tint = Color.White
-                        )
+                        Box {
+                            Icon(
+                                Icons.Default.Notifications,
+                                contentDescription = "Notifications",
+                                tint = Color.White
+                            )
+                            if (unreadCount > 0) {
+                                Box(
+                                    Modifier
+                                        .align(Alignment.TopEnd)
+                                        .size(10.dp)
+                                        .clip(CircleShape)
+                                        .background(Color(0xFFE53935))
+                                )
+                            }
+                        }
                     }
                     IconButton(onClick = {
                         // Showpiece — कुछ नहीं होगा
