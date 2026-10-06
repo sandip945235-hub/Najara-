@@ -22,7 +22,6 @@ fun ShareDialog(
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
-    var selectedOption by remember { mutableStateOf("link") } // "link" या "apk"
 
     Dialog(onDismissRequest = onDismiss) {
         Card(
@@ -72,56 +71,21 @@ fun ShareDialog(
                     }
                 }
 
-                // ===== MIDDLE: RADIO OPTIONS =====
+                // ===== MIDDLE: INFO =====
                 Row(
                     Modifier
                         .fillMaxWidth()
                         .background(Color(0xFFEEEEEE))
                         .padding(vertical = 14.dp),
-                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    horizontalArrangement = Arrangement.Center,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Share APK
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.clickable { selectedOption = "apk" }
-                    ) {
-                        RadioButton(
-                            selected = selectedOption == "apk",
-                            onClick = { selectedOption = "apk" },
-                            colors = RadioButtonDefaults.colors(
-                                selectedColor = Color(0xFFE53935),
-                                unselectedColor = Color(0xFF666666)
-                            )
-                        )
-                        Text(
-                            "Share APK",
-                            fontWeight = FontWeight.Medium,
-                            fontSize = 15.sp,
-                            color = Color.Black
-                        )
-                    }
-
-                    // Share Link
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.clickable { selectedOption = "link" }
-                    ) {
-                        RadioButton(
-                            selected = selectedOption == "link",
-                            onClick = { selectedOption = "link" },
-                            colors = RadioButtonDefaults.colors(
-                                selectedColor = Color(0xFFE53935),
-                                unselectedColor = Color(0xFF666666)
-                            )
-                        )
-                        Text(
-                            "Share Link",
-                            fontWeight = FontWeight.Medium,
-                            fontSize = 15.sp,
-                            color = Color.Black
-                        )
-                    }
+                    Text(
+                        "📦 Najara.apk फ़ाइल शेयर होगी",
+                        fontWeight = FontWeight.Medium,
+                        fontSize = 15.sp,
+                        color = Color.Black
+                    )
                 }
 
                 Spacer(Modifier.height(8.dp))
@@ -129,11 +93,7 @@ fun ShareDialog(
                 // ===== BOTTOM: SHARE BUTTON =====
                 Button(
                     onClick = {
-                        if (selectedOption == "apk") {
-                            ShareHelper.shareApk(context)
-                        } else {
-                            ShareHelper.shareAppLink(context)
-                        }
+                        ShareHelper.shareApk(context)
                         onDismiss()
                     },
                     colors = ButtonDefaults.buttonColors(
