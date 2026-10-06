@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
+import android.widget.Toast
 import androidx.core.content.FileProvider
 import java.io.File
 
@@ -15,10 +16,6 @@ object ShareHelper {
 
     // शेयर होने वाली APK का नाम
     private const val SHARED_APK_NAME = "Najara.apk"
-
-    // ⚠️ यहाँ अपना APK download link डालो
-    // Google Drive link, या अपनी website का link, या Play Store link
-    private const val APP_DOWNLOAD_LINK = "https://play.google.com/store/apps/details?id=com.najara.app"
 
     /**
      * 48 घंटे बाद dialog दिखाना है या नहीं check करो
@@ -39,23 +36,11 @@ object ShareHelper {
     }
 
     /**
-     * App का Link share करने का function
+     * पुराना नाम बना रहने दिया है, ताकि जहाँ-जहाँ यह फ़ंक्शन बुलाया गया है वहाँ भी
+     * अब Najara.apk ही शेयर हो (Play Store का लिंक नहीं)।
      */
     fun shareAppLink(context: Context) {
-        val message = """
-            🎬 Najara App देखो! 🍿
-            
-            नई मूवीज़, वेब सीरीज़ और बहुत कुछ!
-            अभी Download करो और Unlimited Entertainment enjoy करो।
-            
-            📥 Download: $APP_DOWNLOAD_LINK
-        """.trimIndent()
-
-        val intent = Intent(Intent.ACTION_SEND).apply {
-            type = "text/plain"
-            putExtra(Intent.EXTRA_TEXT, message)
-        }
-        context.startActivity(Intent.createChooser(intent, "Share Link via"))
+        shareApk(context)
     }
 
     /**
@@ -65,11 +50,6 @@ object ShareHelper {
     fun shareApk(context: Context) {
         try {
             val original = File(context.packageCodePath)
-
-            if (!original.exists()) {
-                shareAppLink(context)
-                return
-            }
 
             // कैश फ़ोल्डर में Najara.apk नाम से कॉपी
             val apkFile = File(context.cacheDir, SHARED_APK_NAME)
@@ -100,7 +80,11 @@ object ShareHelper {
             }
             context.startActivity(Intent.createChooser(intent, "Share APK via"))
         } catch (e: Exception) {
-            shareAppLink(context)
+            Toast.makeText(
+                context,
+                "APK शेयर नहीं हो पाई: ${e.message}",
+                Toast.LENGTH_LONG
+            ).show()
         }
     }
 }
